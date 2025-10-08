@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# TODO: Download the retrosheet files
+# curl https://www.retrosheet.org/downloads/plays/2024plays.zip ? 
+# extract it too?
+# drop it in /data/
+
 echo "Setting up virtual environment..."
 
 # Create virtual env if it doesn't exist
