@@ -74,7 +74,8 @@ COLUMNS_TO_DROP = ['f2',
 def run():
     loaded_data = load_retrosheet_data()
     modified_data = modify_retrosheet_data(loaded_data)
-    plot_data(modified_data)
+    translated_data = translate_data(modified_data)
+    # plot_data(modified_data)
 
 def load_retrosheet_data():
     print("Loading retrosheet data...")
@@ -102,10 +103,10 @@ def modify_retrosheet_data(loaded_data):
     # __print_data_info(modified_data)
 
     print("Adding last seen data...")
-    modified_data['last_game_seen'] = (
-        modified_data.sort_values(['batter', 'pitcher', 'gid'])
+    modified_data['last_date_seen'] = (
+        modified_data.sort_values(['batter', 'pitcher', 'date'])
                         .groupby(['batter', 'pitcher'])
-                        ['gid'].shift(1)
+                        ['date'].shift(1)
     )
 
     # Udpate all NaN to -1
@@ -115,12 +116,29 @@ def modify_retrosheet_data(loaded_data):
     modified_data['days_since_last_seen'] = modified_data.apply(__get_days_between_games, axis=1)
 
     # Filter to only show data we care about
-    modified_data = modified_data[['batter', 'pitcher', 'gid', 'last_game_seen', 'days_since_last_seen']]
+    # modified_data = modified_data[['batter', 'pitcher', 'gid', 'last_date_seen', 'days_since_last_seen']]
 
-    # print(modified_data[modified_data['days_since_last_seen'] > 0].describe())
-    __print_data_info(modified_data[modified_data['days_since_last_seen'] == 20])
+    print(modified_data[modified_data['days_since_last_seen'] < -1])
+
+    # __print_data_info(modified_data[modified_data['days_since_last_seen'] == 20])
 
     return modified_data
+
+
+def translate_data(modified_data):
+    data_by_days_since = modified_data.groupby('days_since_last_seen')[
+                    [
+                        'pa',
+                        'ab',
+                        'single',
+                        'double',
+                        'triple',
+                        'hr'
+                    ]].sum().sort_values('days_since_last_seen', ascending=True)
+
+    __print_data_info(data_by_days_since)
+
+    return data_by_days_since
 
 
 def plot_data(modified_data):
@@ -131,20 +149,18 @@ def plot_data(modified_data):
     plt.show()
 
 def __get_days_between_games(row):
-    first_game = row['last_game_seen']
-    second_game = row['gid']
+    first_game = str(row['last_date_seen']).split('.')[0]
+    second_game = str(row['date']).split('.')[0]
 
-    if first_game == -1:
+    if first_game == "-1":
         return -1
-    
-    # print(first_game[3:11])
 
-    first_game = datetime.strptime(first_game[3:11], "%Y%m%d").date()
-    second_game = datetime.strptime(second_game[3:11], "%Y%m%d").date()
+    first_game = datetime.strptime(first_game, "%Y%m%d").date()
+    second_game = datetime.strptime(second_game, "%Y%m%d").date()
 
     return (second_game - first_game).days
 
 def __print_data_info(df):
     print(df.shape)
     print(df.columns)
-    print(df.head(5))
+    print(df.head(20))
