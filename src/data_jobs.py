@@ -1,3 +1,5 @@
+from datetime import datetime
+import matplotlib.pyplot as plt
 import os
 import pandas as pd
 import sys
@@ -72,6 +74,7 @@ COLUMNS_TO_DROP = ['f2',
 def run():
     loaded_data = load_retrosheet_data()
     modified_data = modify_retrosheet_data(loaded_data)
+    plot_data(modified_data)
 
 def load_retrosheet_data():
     print("Loading retrosheet data...")
@@ -92,14 +95,56 @@ def load_retrosheet_data():
 
 
 def modify_retrosheet_data(loaded_data):
-    print("Modifying retrosheet data...")
+    print("Modifying retrosheet data ->")
 
     print("Removing unneeded columns...")
     modified_data = loaded_data.drop(COLUMNS_TO_DROP, axis='columns')
-    __print_data_info(modified_data)
+    # __print_data_info(modified_data)
 
+    print("Adding last seen data...")
+    modified_data['last_game_seen'] = (
+        modified_data.sort_values(['batter', 'pitcher', 'gid'])
+                        .groupby(['batter', 'pitcher'])
+                        ['gid'].shift(1)
+    )
+
+    # Udpate all NaN to -1
+    modified_data = modified_data.fillna(-1)
+
+    # Add days since last seen
+    modified_data['days_since_last_seen'] = modified_data.apply(__get_days_between_games, axis=1)
+
+    # Filter to only show data we care about
+    modified_data = modified_data[['batter', 'pitcher', 'gid', 'last_game_seen', 'days_since_last_seen']]
+
+    # print(modified_data[modified_data['days_since_last_seen'] > 0].describe())
+    __print_data_info(modified_data[modified_data['days_since_last_seen'] == 20])
+
+    return modified_data
+
+
+def plot_data(modified_data):
+    modified_data[modified_data["days_since_last_seen"] > 0].hist(bins=3)
+    plt.xlabel("Days Since Last Seen")
+    plt.ylabel("Count")
+    plt.title("Distribution of 'Days Since Last Seen'")
+    plt.show()
+
+def __get_days_between_games(row):
+    first_game = row['last_game_seen']
+    second_game = row['gid']
+
+    if first_game == -1:
+        return -1
+    
+    # print(first_game[3:11])
+
+    first_game = datetime.strptime(first_game[3:11], "%Y%m%d").date()
+    second_game = datetime.strptime(second_game[3:11], "%Y%m%d").date()
+
+    return (second_game - first_game).days
 
 def __print_data_info(df):
     print(df.shape)
     print(df.columns)
-    print(df.head())
+    print(df.head(5))
