@@ -1,5 +1,6 @@
 from datetime import datetime
 import matplotlib.pyplot as plt
+import numpy as np
 import os
 import pandas as pd
 import sys
@@ -71,11 +72,18 @@ COLUMNS_TO_DROP = ['f2',
                    'gametype',
                    'pbp']
 
+available_data = {}
+
 def run():
-    loaded_data = load_retrosheet_data()
-    modified_data = modify_retrosheet_data(loaded_data)
-    translated_data = translate_data(modified_data)
-    plot_data(translated_data)
+    available_data['loaded_data'] = load_retrosheet_data()
+    available_data['days_since_last_seen_raw'] = add_days_since_last_seen(available_data['loaded_data'])
+    available_data['days_since_last_seen'] = add_stats_to_data(available_data['days_since_last_seen_raw'], groupby='days_since_last_seen')
+    available_data['times_seen_data_raw'] = add_times_seen_this_season(available_data['loaded_data'])
+    available_data['times_seen_data'] = add_stats_to_data(available_data['times_seen_data_raw'], groupby='times_seen')
+
+    # __print_data_info(available_data['times_seen_data'])
+
+    plot_data(available_data)
 
 def load_retrosheet_data():
     print("Loading retrosheet data...")
@@ -88,45 +96,52 @@ def load_retrosheet_data():
         try:
             loaded_data = pd.read_csv(file_path)
             print(f"Successfully loaded {file_path}!")
+
+            # TODO: Put this somewhere better
+            print("Removing unneeded columns...")
+            loaded_data = loaded_data.drop(COLUMNS_TO_DROP, axis='columns')
+
             return loaded_data
         except Exception as e:
             print(f"An error occurred while loading {file_path}!")
             print(e)
             sys.exit()
 
-
-def modify_retrosheet_data(loaded_data):
+def add_days_since_last_seen(loaded_data):
     print("Modifying retrosheet data ->")
 
-    print("Removing unneeded columns...")
-    modified_data = loaded_data.drop(COLUMNS_TO_DROP, axis='columns')
-    # __print_data_info(modified_data)
+    output_data = loaded_data.copy(deep=True)
 
-    print("Adding last seen data...")
-    modified_data['last_date_seen'] = (
-        modified_data.sort_values(['batter', 'pitcher', 'date'])
+    print("Adding days since last seen data...")
+    output_data['last_date_seen'] = (
+        output_data.sort_values(['batter', 'pitcher', 'date'])
                         .groupby(['batter', 'pitcher'])
                         ['date'].shift(1)
     )
 
     # Udpate all NaN to -1
-    modified_data = modified_data.fillna(-1)
+    output_data = output_data.fillna(-1)
 
     # Add days since last seen
-    modified_data['days_since_last_seen'] = modified_data.apply(__get_days_between_games, axis=1)
+    output_data['days_since_last_seen'] = output_data.apply(__get_days_between_games, axis=1)
 
-    # Filter to only show data we care about
-    # modified_data = modified_data[['batter', 'pitcher', 'gid', 'last_date_seen', 'days_since_last_seen']]
+    return output_data
 
-    # print(modified_data[modified_data['days_since_last_seen'] < -1])
+def add_times_seen_this_season(loaded_data):
+    print("Modifying retrosheet data ->")
+    
+    output_data = loaded_data.copy(deep=True)
 
-    # __print_data_info(modified_data[modified_data['days_since_last_seen'] == 20])
+    print("Adding # times seen that season...")
+    output_data['times_seen'] = output_data.sort_values(['batter', 'pitcher', 'date']).groupby(['batter', 'pitcher']).cumcount()
 
-    return modified_data
+    return output_data
 
+def add_stats_to_data(input_data, groupby):
 
-def translate_data(modified_data):
-    data_by_days_since = modified_data.groupby('days_since_last_seen')[
+    output_data = input_data.copy(deep=True)
+
+    output_data = output_data.groupby(groupby)[
                     [
                         'pa',
                         'ab',
@@ -145,44 +160,62 @@ def translate_data(modified_data):
                         'rbi1',
                         'rbi2',
                         'rbi3'
-                    ]].sum().sort_values('days_since_last_seen', ascending=True)
+                    ]].sum().sort_values(groupby, ascending=True)
 
     # Collapse some stats
     print("Calculating stats...")
     # Just hits
-    data_by_days_since['h'] = data_by_days_since['single'] + data_by_days_since['double'] + data_by_days_since['triple'] + data_by_days_since['hr']
+    output_data['h'] = output_data['single'] + output_data['double'] + output_data['triple'] + output_data['hr']
     # Just RBIs
-    data_by_days_since['rbi'] = data_by_days_since['rbi_b'] + data_by_days_since['rbi1'] + data_by_days_since['rbi2'] + data_by_days_since['rbi3']
+    output_data['rbi'] = output_data['rbi_b'] + output_data['rbi1'] + output_data['rbi2'] + output_data['rbi3']
     # AVG
-    data_by_days_since['avg'] = data_by_days_since.apply(__calc_average, axis=1)
+    output_data['avg'] = output_data.apply(__calc_average, axis=1)
     # OBP
-    data_by_days_since['obp'] = data_by_days_since.apply(__calc_onbase, axis=1)
+    output_data['obp'] = output_data.apply(__calc_onbase, axis=1)
     # SLG
-    data_by_days_since['slg'] = data_by_days_since.apply(__calc_slugging, axis=1)
+    output_data['slg'] = output_data.apply(__calc_slugging, axis=1)
     # OPS
-    data_by_days_since['ops'] = data_by_days_since['obp'] + data_by_days_since['slg']
+    output_data['ops'] = output_data['obp'] + output_data['slg']
 
-    data_by_days_since = data_by_days_since.drop(['single', 'rbi_b', 'rbi1', 'rbi2', 'rbi3'], axis='columns')
+    output_data = output_data.drop(['single', 'rbi_b', 'rbi1', 'rbi2', 'rbi3'], axis='columns')
 
-    __print_data_info(data_by_days_since)
+    return output_data.reset_index()
 
-    return data_by_days_since.reset_index()
+def plot_data(dataframes):
 
+    days_seen_data = dataframes['days_since_last_seen']
 
-def plot_data(dataframe):
-    dataframe.plot(x="days_since_last_seen", y=["avg", "obp", "slg", "ops"], kind="line")
+    days_seen_data.plot(x="days_since_last_seen", y=["avg", "obp", "slg", "ops"], kind="line")
     plt.title("Rate Stats by Days Since Last Seen")
     plt.xlabel("Days Since")
     plt.ylabel("Rate")
     plt.legend(title="Players")
+
+    ######################
+
+    times_seen = dataframes['times_seen_data']
+
+    # Need to aggregate all times_seen >12
+    times_seen["times_seen_grouped"] = np.where(times_seen["times_seen"] > 12, "13+", times_seen["times_seen"].astype(str))
+
+    times_seen = (
+        times_seen.groupby("times_seen_grouped", as_index=False)
+        .agg({"ab": "sum"})
+        .sort_values("times_seen_grouped", key=lambda x: x.replace({"13+": 13}).astype(int))
+    )
+
+    __print_data_info(times_seen)
+
+    times_seen.plot(x="times_seen", y=["avg", "obp", "slg", "ops"], kind="line")
+    plt.title("Rate Stats by Times Seen this Season")
+    plt.xlabel("Times Seen")
+    plt.ylabel("Rate")
+    plt.legend(title="Players")
+
+    ######################
+
     plt.show()
     
-    # modified_data[modified_data["days_since_last_seen"] > 0].hist(bins=3)
-    # plt.xlabel("Days Since Last Seen")
-    # plt.ylabel("Count")
-    # plt.title("Distribution of 'Days Since Last Seen'")
-    # plt.show()
-
 def __get_days_between_games(row):
     first_game = str(row['last_date_seen']).split('.')[0]
     second_game = str(row['date']).split('.')[0]
@@ -209,4 +242,4 @@ def __calc_slugging(row):
 def __print_data_info(df):
     print(df.shape)
     print(df.columns)
-    print(df.head(20))
+    print(df.head(50))
