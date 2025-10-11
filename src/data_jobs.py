@@ -75,7 +75,7 @@ def run():
     loaded_data = load_retrosheet_data()
     modified_data = modify_retrosheet_data(loaded_data)
     translated_data = translate_data(modified_data)
-    # plot_data(modified_data)
+    plot_data(translated_data)
 
 def load_retrosheet_data():
     print("Loading retrosheet data...")
@@ -118,7 +118,7 @@ def modify_retrosheet_data(loaded_data):
     # Filter to only show data we care about
     # modified_data = modified_data[['batter', 'pitcher', 'gid', 'last_date_seen', 'days_since_last_seen']]
 
-    print(modified_data[modified_data['days_since_last_seen'] < -1])
+    # print(modified_data[modified_data['days_since_last_seen'] < -1])
 
     # __print_data_info(modified_data[modified_data['days_since_last_seen'] == 20])
 
@@ -133,20 +133,55 @@ def translate_data(modified_data):
                         'single',
                         'double',
                         'triple',
-                        'hr'
+                        'hr',
+                        'sh',
+                        'sf',
+                        'hbp',
+                        'walk',
+                        'iw',
+                        'k',
+                        'xi',
+                        'rbi_b',
+                        'rbi1',
+                        'rbi2',
+                        'rbi3'
                     ]].sum().sort_values('days_since_last_seen', ascending=True)
+
+    # Collapse some stats
+    print("Calculating stats...")
+    # Just hits
+    data_by_days_since['h'] = data_by_days_since['single'] + data_by_days_since['double'] + data_by_days_since['triple'] + data_by_days_since['hr']
+    # Just RBIs
+    data_by_days_since['rbi'] = data_by_days_since['rbi_b'] + data_by_days_since['rbi1'] + data_by_days_since['rbi2'] + data_by_days_since['rbi3']
+    # AVG
+    data_by_days_since['avg'] = data_by_days_since.apply(__calc_average, axis=1)
+    # OBP
+    data_by_days_since['obp'] = data_by_days_since.apply(__calc_onbase, axis=1)
+    # SLG
+    data_by_days_since['slg'] = data_by_days_since.apply(__calc_slugging, axis=1)
+    # OPS
+    data_by_days_since['ops'] = data_by_days_since['obp'] + data_by_days_since['slg']
+
+    data_by_days_since = data_by_days_since.drop(['single', 'rbi_b', 'rbi1', 'rbi2', 'rbi3'], axis='columns')
 
     __print_data_info(data_by_days_since)
 
-    return data_by_days_since
+    return data_by_days_since.reset_index()
 
 
-def plot_data(modified_data):
-    modified_data[modified_data["days_since_last_seen"] > 0].hist(bins=3)
-    plt.xlabel("Days Since Last Seen")
-    plt.ylabel("Count")
-    plt.title("Distribution of 'Days Since Last Seen'")
+def plot_data(dataframe):
+    dataframe.plot(x="days_since_last_seen", y=["avg", "obp", "slg", "ops"], kind="line")
+    plt.title("Rate Stats by Days Since Last Seen")
+    plt.xlabel("Days Since")
+    plt.ylabel("Rate")
+    plt.legend(title="Players")
     plt.show()
+    
+    # modified_data[modified_data["days_since_last_seen"] > 0].hist(bins=3)
+    # plt.xlabel("Days Since Last Seen")
+    # plt.ylabel("Count")
+    # plt.title("Distribution of 'Days Since Last Seen'")
+    # plt.show()
 
 def __get_days_between_games(row):
     first_game = str(row['last_date_seen']).split('.')[0]
@@ -159,6 +194,17 @@ def __get_days_between_games(row):
     second_game = datetime.strptime(second_game, "%Y%m%d").date()
 
     return (second_game - first_game).days
+
+def __calc_average(row):
+    return round(row['h'] / row['ab'], 3)
+
+def __calc_onbase(row):
+    # OBP = (Hits + Walks + Hit by Pitch) ÷ (At Bats + Walks + Hit by Pitch + Sacrifice Flies)
+    return round((row['h'] + row['walk'] + row['hbp']) / (row['ab'] + row['walk'] + row['hbp'] + row['sf']), 3)
+
+def __calc_slugging(row):
+    # SLG = (Singles + (2 × Doubles) + (3 × Triples) + (4 × Home Runs)) ÷ At Bats
+    return round((row['single'] + (2 * row['double']) + (3 * row['triple']) + (4 * row['hr'])) / row['ab'], 3)
 
 def __print_data_info(df):
     print(df.shape)
