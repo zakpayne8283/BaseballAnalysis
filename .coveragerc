@@ -1,0 +1,6 @@
+[run]
+omit =
+    */data_jobs.py
+    */tests/*
+    */__init__.py
+    */main.py

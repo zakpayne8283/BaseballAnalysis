@@ -1,8 +1,20 @@
 import data_jobs
+from models.season import Season
 
 def main():
     print("Starting...")
-    data_jobs.run()
+
+    # Specify the seasons to run here
+    years = [2024]
+
+    # Build our configs, which also caluclate all of the season coefficients (e.g. for wOBA)
+    seasons = []
+    for year in years:
+        seasons.append(Season(year))
+
+    # Run the data_jobs, passing that config object
+
+    # data_jobs.run()
 
 if __name__ == '__main__':
     main()
