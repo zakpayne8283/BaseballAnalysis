@@ -10,7 +10,11 @@ def main():
     # Build our configs, which also caluclate all of the season coefficients (e.g. for wOBA)
     seasons = []
     for year in years:
-        seasons.append(Season(year))
+        s = Season(year)
+
+        s.print_data('batter')
+
+        seasons.append(s)
 
     # Run the data_jobs, passing that config object
 

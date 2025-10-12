@@ -2,6 +2,8 @@ import os
 import pandas as pd
 import sys
 
+import utils.formulas as formulas
+
 CSV_ROOT = 'data/'
 
 class Season:
@@ -12,6 +14,7 @@ class Season:
 
     # Stored data
     csv_data_raw = None
+    hitter_data = None
 
     def __init__(self, year, skip_setup=False):
         self.year_id = year
@@ -20,6 +23,61 @@ class Season:
         if skip_setup is False:
             # Load the CSV file
             self.__load_csv_data()
+            # Calculate all batter stats
+            self.__calc_batter_stats()
+
+    def print_data(self, dataframe_str):
+        
+        df = None
+        
+        if dataframe_str == 'batter':
+            df = self.hitter_data
+        elif dataframe_str == 'raw':
+            df = self.csv_data_raw
+        
+        print(df.columns)
+        print(df.head())
+
+    def __calc_batter_stats(self):
+        self.hitter_data = self.csv_data_raw.copy(deep=True).groupby('batter')[
+                    [
+                        'pa',
+                        'ab',
+                        'single',
+                        'double',
+                        'triple',
+                        'hr',
+                        'sh',
+                        'sf',
+                        'hbp',
+                        'walk',
+                        'iw',
+                        'k',
+                        'rbi_b',
+                        'rbi1',
+                        'rbi2',
+                        'rbi3'
+                    ]].sum()
+        
+        # Seperate out just hits
+        self.hitter_data['h'] = formulas.calc_hits(self.hitter_data)
+        # Seperate out just RBIs
+        self.hitter_data['rbi'] = formulas.calc_rbis(self.hitter_data)
+        
+        # Calculate AVG
+        self.hitter_data['avg'] = formulas.calc_avg(self.hitter_data)
+        # Calculate OBP
+        self.hitter_data['obp'] = formulas.calc_onbase(self.hitter_data)
+        # Calculate SLG
+        self.hitter_data['slg'] = formulas.calc_slugging(self.hitter_data)
+        # Add OPS
+        self.hitter_data['ops'] = self.hitter_data['obp'] + self.hitter_data['slg']
+
+        # Drop the old columns now
+        self.hitter_data = self.hitter_data.drop(['single', 'rbi_b', 'rbi1', 'rbi2', 'rbi3'], axis='columns')
+
+        # Reset the index
+        self.hitter_data = self.hitter_data.reset_index()
 
     def __load_csv_data(self):
         print(f"Loading CSV data for {self.year_id} season...")

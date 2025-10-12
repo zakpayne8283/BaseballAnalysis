@@ -137,50 +137,6 @@ def add_times_seen_this_season(loaded_data):
 
     return output_data
 
-def add_stats_to_data(input_data, groupby):
-
-    output_data = input_data.copy(deep=True)
-
-    output_data = output_data.groupby(groupby)[
-                    [
-                        'pa',
-                        'ab',
-                        'single',
-                        'double',
-                        'triple',
-                        'hr',
-                        'sh',
-                        'sf',
-                        'hbp',
-                        'walk',
-                        'iw',
-                        'k',
-                        'xi',
-                        'rbi_b',
-                        'rbi1',
-                        'rbi2',
-                        'rbi3'
-                    ]].sum().sort_values(groupby, ascending=True)
-
-    # Collapse some stats
-    print("Calculating stats...")
-    # Just hits
-    output_data['h'] = output_data['single'] + output_data['double'] + output_data['triple'] + output_data['hr']
-    # Just RBIs
-    output_data['rbi'] = output_data['rbi_b'] + output_data['rbi1'] + output_data['rbi2'] + output_data['rbi3']
-    # AVG
-    output_data['avg'] = output_data.apply(__calc_average, axis=1)
-    # OBP
-    output_data['obp'] = output_data.apply(__calc_onbase, axis=1)
-    # SLG
-    output_data['slg'] = output_data.apply(__calc_slugging, axis=1)
-    # OPS
-    output_data['ops'] = output_data['obp'] + output_data['slg']
-
-    output_data = output_data.drop(['single', 'rbi_b', 'rbi1', 'rbi2', 'rbi3'], axis='columns')
-
-    return output_data.reset_index()
-
 def plot_data(dataframes):
 
     days_seen_data = dataframes['days_since_last_seen']
@@ -204,8 +160,6 @@ def plot_data(dataframes):
         .sort_values("times_seen_grouped", key=lambda x: x.replace({"13+": 13}).astype(int))
     )
 
-    __print_data_info(times_seen)
-
     times_seen.plot(x="times_seen", y=["avg", "obp", "slg", "ops"], kind="line")
     plt.title("Rate Stats by Times Seen this Season")
     plt.xlabel("Times Seen")
@@ -227,19 +181,3 @@ def __get_days_between_games(row):
     second_game = datetime.strptime(second_game, "%Y%m%d").date()
 
     return (second_game - first_game).days
-
-def __calc_average(row):
-    return round(row['h'] / row['ab'], 3)
-
-def __calc_onbase(row):
-    # OBP = (Hits + Walks + Hit by Pitch) ÷ (At Bats + Walks + Hit by Pitch + Sacrifice Flies)
-    return round((row['h'] + row['walk'] + row['hbp']) / (row['ab'] + row['walk'] + row['hbp'] + row['sf']), 3)
-
-def __calc_slugging(row):
-    # SLG = (Singles + (2 × Doubles) + (3 × Triples) + (4 × Home Runs)) ÷ At Bats
-    return round((row['single'] + (2 * row['double']) + (3 * row['triple']) + (4 * row['hr'])) / row['ab'], 3)
-
-def __print_data_info(df):
-    print(df.shape)
-    print(df.columns)
-    print(df.head(50))
