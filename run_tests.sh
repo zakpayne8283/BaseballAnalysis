@@ -2,7 +2,12 @@
 
 # Optional: Activate virtualenv
 if [ -d ".venv" ]; then
-    source .venv/Scripts/activate
+    # Activate the virtual environment
+    if [ -f ".venv/bin/activate" ]; then
+        source .venv/bin/activate
+    else
+        source .venv/Scripts/activate
+    fi
 else
     echo "No .venv found. Did you run setup.sh?"
     exit 1

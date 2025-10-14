@@ -9,14 +9,18 @@ echo "Setting up virtual environment..."
 
 # Create virtual env if it doesn't exist
 if [ ! -d ".venv" ]; then
-    python -m venv .venv # TODO: Handle systems with python & python3
+    python3 -m venv .venv # TODO: Handle systems with python & python3
     echo "Virtual environment created."
 else
     echo "Virtual environment already exists."
 fi
 
 # Activate the virtual environment
-source .venv/Scripts/activate
+if [ -f ".venv/bin/activate" ]; then
+    source .venv/bin/activate
+else
+    source .venv/Scripts/activate
+fi
 
 # Install dependencies
 if [ -f requirements.txt ]; then
