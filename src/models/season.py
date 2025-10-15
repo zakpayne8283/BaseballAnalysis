@@ -3,6 +3,7 @@ import pandas as pd
 import sys
 
 import utils.formulas as formulas
+from models.league_stats import LeagueStats
 
 CSV_ROOT = 'data/'
 
@@ -14,6 +15,7 @@ class Season:
 
     # Stored data
     csv_data_raw = None
+    league_stats = LeagueStats()
     hitter_data = None
 
     def __init__(self, year, skip_setup=False):
@@ -23,6 +25,10 @@ class Season:
         if skip_setup is False:
             # Load the CSV file
             self.__load_csv_data()
+
+            # Calculate all league-wide stats
+            self.__calc_league_stats()
+            
             # Calculate all batter stats
             self.__calc_batter_stats()
 
@@ -34,11 +40,20 @@ class Season:
             df = self.hitter_data
         elif dataframe_str == 'raw':
             df = self.csv_data_raw
+        elif dataframe_str == 'league':
+            df = self.league_stats.as_dataframe()
         
         print(df.columns)
         print(df.head())
 
+    def __calc_league_stats(self):
+        self.league_stats.games = self.csv_data_raw['gid'].nunique()
+
     def __calc_batter_stats(self):
+
+        # TODO: Also add a count of unique game IDs for each player,
+        # representing # of games played
+
         self.hitter_data = self.csv_data_raw.copy(deep=True).groupby('batter')[
                     [
                         'pa',
@@ -89,3 +104,4 @@ class Season:
             print(f"An error occurred while loading {self.csv_path}!")
             print(e)
             sys.exit()
+
