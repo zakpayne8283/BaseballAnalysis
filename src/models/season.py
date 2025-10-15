@@ -54,26 +54,29 @@ class Season:
         # TODO: Also add a count of unique game IDs for each player,
         # representing # of games played
 
-        self.hitter_data = self.csv_data_raw.copy(deep=True).groupby('batter')[
-                    [
-                        'pa',
-                        'ab',
-                        'single',
-                        'double',
-                        'triple',
-                        'hr',
-                        'sh',
-                        'sf',
-                        'hbp',
-                        'walk',
-                        'iw',
-                        'k',
-                        'rbi_b',
-                        'rbi1',
-                        'rbi2',
-                        'rbi3'
-                    ]].sum()
+        self.hitter_data = self.csv_data_raw.copy(deep=True).groupby('batter').agg({
+                        'gid': 'nunique',
+                        'pa': 'sum',
+                        'ab': 'sum',
+                        'single': 'sum',
+                        'double': 'sum',
+                        'triple': 'sum',
+                        'hr': 'sum',
+                        'sh': 'sum',
+                        'sf': 'sum',
+                        'hbp': 'sum',
+                        'walk': 'sum',
+                        'iw': 'sum',
+                        'k': 'sum',
+                        'rbi_b': 'sum',
+                        'rbi1': 'sum',
+                        'rbi2': 'sum',
+                        'rbi3': 'sum'
+                    })
         
+        # Rename columns as needed
+        self.hitter_data = self.hitter_data.rename(columns={"gid": "g"})
+
         # Seperate out just hits
         self.hitter_data['h'] = formulas.calc_hits(self.hitter_data)
         # Seperate out just RBIs

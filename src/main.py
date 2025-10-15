@@ -12,7 +12,7 @@ def main():
     for year in years:
         s = Season(year)
 
-        s.print_data('league')
+        s.print_data('batter')
 
         seasons.append(s)
 
