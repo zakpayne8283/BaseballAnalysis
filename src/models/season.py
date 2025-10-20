@@ -18,7 +18,7 @@ class Season:
     league_stats = LeagueStats()
     hitter_data = None
 
-    def __init__(self, year, skip_setup=False):
+    def __init__(self, year, skip_setup=False, skip_steps=[]):
         self.year_id = year
         self.csv_path = os.path.join(CSV_ROOT, f"{year}plays.csv")
 
@@ -27,10 +27,12 @@ class Season:
             self.__load_csv_data()
 
             # Calculate all league-wide stats
-            self.__calc_league_stats()
+            if 'league' not in skip_steps:
+                self.__calc_league_stats()
             
             # Calculate all batter stats
-            self.__calc_batter_stats()
+            if 'batter' not in skip_steps:
+                self.__calc_batter_stats()
 
     def print_data(self, dataframe_str):
         
@@ -48,6 +50,7 @@ class Season:
 
     def __calc_league_stats(self):
         self.league_stats.games = self.csv_data_raw['gid'].nunique()
+        self.__calc_run_expectancy_matrix()
 
     def __calc_batter_stats(self):
 
@@ -96,6 +99,40 @@ class Season:
 
         # Reset the index
         self.hitter_data = self.hitter_data.reset_index()
+
+    def __calc_run_expectancy_matrix(self):
+        re_data_needed = self.csv_data_raw.copy(deep=True)[[
+            'gid',
+            'inning',
+            'top_bot',
+            'outs_pre',
+            'br1_pre',
+            'br2_pre',
+            'br3_pre',
+            'runs'
+        ]]
+
+        re_data_needed['inning_runs'] = re_data_needed.groupby([
+            'gid', 'inning', 'top_bot', 'outs_pre'
+            ])['runs'].transform('sum')
+
+        re_data_needed['br1_pre'] = re_data_needed['br1_pre'].notna().astype(int)
+        re_data_needed['br2_pre'] = re_data_needed['br2_pre'].notna().astype(int)
+        re_data_needed['br3_pre'] = re_data_needed['br3_pre'].notna().astype(int)
+
+        re_data_needed['base_state'] = (
+            re_data_needed['br1_pre'] +
+            re_data_needed['br2_pre'] * 2 +
+            re_data_needed['br3_pre'] * 4
+            )
+        
+        re_matrix = (
+            re_data_needed.groupby(['outs_pre', 'base_state'], as_index=False)
+                          .agg(run_expectancy=('inning_runs', 'mean'))
+                          .pivot(index='outs_pre', columns='base_state', values='run_expectancy')
+        )
+
+        print(re_matrix)
 
     def __load_csv_data(self):
         print(f"Loading CSV data for {self.year_id} season...")

@@ -10,9 +10,9 @@ def main():
     # Build our configs, which also caluclate all of the season coefficients (e.g. for wOBA)
     seasons = []
     for year in years:
-        s = Season(year)
+        s = Season(year, skip_steps=['batter'])
 
-        s.print_data('batter')
+        # s.print_data('raw')
 
         seasons.append(s)
 
