@@ -34,7 +34,7 @@ class Season:
             if 'batter' not in skip_steps:
                 self.__calc_batter_stats()
 
-    def print_data(self, dataframe_str):
+    def print_data(self, dataframe_str, head_count=10):
         
         df = None
         
@@ -46,10 +46,11 @@ class Season:
             df = self.league_stats.as_dataframe()
         
         print(df.columns)
-        print(df.head())
+        print(df.head(head_count))
 
     def __calc_league_stats(self):
         self.league_stats.games = self.csv_data_raw['gid'].nunique()
+        self.__calc_aggregate_league_stats()
         self.__calc_run_expectancy_matrix()
 
     def __calc_batter_stats(self):
@@ -57,7 +58,18 @@ class Season:
         # TODO: Also add a count of unique game IDs for each player,
         # representing # of games played
 
-        self.hitter_data = self.csv_data_raw.copy(deep=True).groupby('batter').agg({
+        # Copy the data from raw
+        hitter_data = self.csv_data_raw.copy(deep=True)
+        
+        # Filter out all events which are
+        # Irrelevant to hitter specific data:
+        hitter_data = hitter_data[
+            # no-pitch (NP) events
+            (hitter_data['event'] != 'NP')
+        ]
+
+        # Now pull aggregate all data needed
+        self.hitter_data = hitter_data.groupby('batter').agg({
                         'gid': 'nunique',
                         'pa': 'sum',
                         'ab': 'sum',
@@ -77,28 +89,40 @@ class Season:
                         'rbi3': 'sum'
                     })
         
-        # Rename columns as needed
-        self.hitter_data = self.hitter_data.rename(columns={"gid": "g"})
-
-        # Seperate out just hits
-        self.hitter_data['h'] = formulas.calc_hits(self.hitter_data)
-        # Seperate out just RBIs
-        self.hitter_data['rbi'] = formulas.calc_rbis(self.hitter_data)
+        # Adjust the data as needed
+        self.hitter_data = self.__fix_routine_stats(self.hitter_data)
         
-        # Calculate AVG
-        self.hitter_data['avg'] = formulas.calc_avg(self.hitter_data)
-        # Calculate OBP
-        self.hitter_data['obp'] = formulas.calc_onbase(self.hitter_data)
-        # Calculate SLG
-        self.hitter_data['slg'] = formulas.calc_slugging(self.hitter_data)
-        # Add OPS
-        self.hitter_data['ops'] = self.hitter_data['obp'] + self.hitter_data['slg']
-
-        # Drop the old columns now
-        self.hitter_data = self.hitter_data.drop(['single', 'rbi_b', 'rbi1', 'rbi2', 'rbi3'], axis='columns')
-
         # Reset the index
         self.hitter_data = self.hitter_data.reset_index()
+
+    def __calc_aggregate_league_stats(self):
+
+        # Aggregate all applicable data fields
+        league_agg_stats = self.csv_data_raw.copy(deep=True).agg({
+                        'gid': 'nunique',
+                        'pa': 'sum',
+                        'ab': 'sum',
+                        'single': 'sum',
+                        'double': 'sum',
+                        'triple': 'sum',
+                        'hr': 'sum',
+                        'sh': 'sum',
+                        'sf': 'sum',
+                        'hbp': 'sum',
+                        'walk': 'sum',
+                        'iw': 'sum',
+                        'k': 'sum',
+                        'rbi_b': 'sum',
+                        'rbi1': 'sum',
+                        'rbi2': 'sum',
+                        'rbi3': 'sum'
+                    })
+        
+        # Adjust the league stats as needed
+        league_agg_stats = self.__fix_routine_stats(league_agg_stats)
+
+        # Add the aggregated stats to the league stats
+        self.league_stats.add_aggregate_stats(league_agg_stats)
 
     def __calc_run_expectancy_matrix(self):
         re_data_needed = self.csv_data_raw.copy(deep=True)[[
@@ -132,13 +156,52 @@ class Season:
                           .pivot(index='outs_pre', columns='base_state', values='run_expectancy')
         )
 
-        print(re_matrix)
+        self.league_stats.run_expectancy_matrix = re_matrix
 
-    def __load_csv_data(self):
-        print(f"Loading CSV data for {self.year_id} season...")
+    def __fix_routine_stats(self, batting_stats):
+
+        # Rename columns as needed
+        if type(batting_stats) is pd.Series:
+            batting_stats = batting_stats.replace("gid", "g")
+        else:
+            batting_stats = batting_stats.rename(columns={"gid": "g"})
+
+        # Seperate out just hits
+        batting_stats['h'] = formulas.calc_hits(batting_stats)
+        # Seperate out just RBIs
+        batting_stats['rbi'] = formulas.calc_rbis(batting_stats)
+        
+        # Calculate AVG
+        batting_stats['avg'] = formulas.calc_avg(batting_stats)
+        # Calculate OBP
+        batting_stats['obp'] = formulas.calc_onbase(batting_stats)
+        # Calculate SLG
+        batting_stats['slg'] = formulas.calc_slugging(batting_stats)
+        # Add OPS
+        batting_stats['ops'] = batting_stats['obp'] + batting_stats['slg']
+
+        # Drop the old columns now
+        columns_to_drop = [
+            'single',
+            'rbi_b',
+            'rbi1',
+            'rbi2',
+            'rbi3'
+        ]
+
+        if type(batting_stats) is pd.Series:
+            batting_stats = batting_stats[~batting_stats.isin(columns_to_drop)]
+        else:
+            batting_stats = batting_stats.drop(columns_to_drop, axis='columns')
+        
+        return batting_stats
+
+    def __load_csv_data(self, game_type='regular'):
+        print(f"Loading {game_type} games CSV data for {self.year_id} season...")
 
         try:
             self.csv_data_raw = pd.read_csv(self.csv_path)
+            self.csv_data_raw = self.csv_data_raw[self.csv_data_raw['gametype'] == game_type]
             print(f"Successfully loaded {self.csv_path}!")
         except FileNotFoundError as e:
             print(f"An error occurred while loading {self.csv_path}!")
